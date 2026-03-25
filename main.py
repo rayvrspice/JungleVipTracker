@@ -3,7 +3,6 @@ from discord import app_commands
 import json
 import os
 from datetime import datetime
-import asyncio
 from flask import Flask
 from threading import Thread
 

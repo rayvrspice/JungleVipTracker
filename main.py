@@ -120,12 +120,7 @@ async def subtract(interaction: discord.Interaction, member: discord.Member, amo
     await interaction.followup.send(f"Subtracted {amount}")
     await send_log(interaction, "SUBTRACT", member, amount, new_balance)
 
-async def main():
-    while True:
-        try:
-            await client.start(os.getenv("TOKEN"))
-        except Exception:
-            await asyncio.sleep(5)
+
 
 print("🚀 Starting bot...")
 client.run(os.getenv("TOKEN"))

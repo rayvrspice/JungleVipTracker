@@ -127,13 +127,5 @@ async def main():
         except Exception:
             await asyncio.sleep(5)
 
-while True:
-    try:
-        print("🚀 Starting bot...")
-        client.run(os.getenv("TOKEN"))
-    except Exception as e:
-        print(f"❌ Crash: {e}")
-        print("🔁 Restarting in 5 seconds...")
-        import time
-        time.sleep(5)
-        
+print("🚀 Starting bot...")
+client.run(os.getenv("TOKEN"))

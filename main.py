@@ -121,5 +121,10 @@ async def subtract(interaction: discord.Interaction, member: discord.Member, amo
 
 
 
+import time
+
+print("⏳ Waiting before starting bot...")
+time.sleep(15)  # prevents rate limit
+
 print("🚀 Starting bot...")
 client.run(os.getenv("TOKEN"))

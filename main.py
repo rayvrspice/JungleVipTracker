@@ -7,8 +7,8 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-DATA_FILE = "balances.json"
-CONFIG_FILE = "config.json"
+DATA_FILE = "/home/ubuntu/JungleVipTracker/balances.json"
+CONFIG_FILE = "/home/ubuntu/JungleVipTracker/config.json"
 
 intents = discord.Intents.default()
 intents.members = True

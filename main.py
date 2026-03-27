@@ -286,10 +286,5 @@ async def viewconfig(interaction: discord.Interaction):
 # RUN BOT (AUTO-RESTART)
 # ======================
 
-while True:
-    try:
-        print("🚀 Starting bot...")
-        client.run(os.getenv("TOKEN"))
-    except Exception as e:
-        print(f"❌ Bot crashed: {e}")
-        time.sleep(10)
+print("🚀 Starting bot...")
+client.run(os.getenv("TOKEN"))

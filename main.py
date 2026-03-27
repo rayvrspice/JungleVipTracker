@@ -2,21 +2,13 @@ import discord
 from discord import app_commands
 import json
 import os
-import time
 from datetime import datetime
 from dotenv import load_dotenv
-load_dotenv()
 
-# ======================
-# FILES
-# ======================
+load_dotenv()
 
 DATA_FILE = "balances.json"
 CONFIG_FILE = "config.json"
-
-# ======================
-# DISCORD SETUP
-# ======================
 
 intents = discord.Intents.default()
 intents.members = True
@@ -48,7 +40,11 @@ def get_balance(data, guild_id, user_id):
     if guild_id not in data:
         data[guild_id] = {}
 
-    return data[guild_id].get(user_id, 0)
+    # ✅ AUTO CREATE USER
+    if user_id not in data[guild_id]:
+        data[guild_id][user_id] = 0
+
+    return data[guild_id][user_id]
 
 def set_balance(data, guild_id, user_id, amount):
     guild_id = str(guild_id)
@@ -60,7 +56,7 @@ def set_balance(data, guild_id, user_id, amount):
     data[guild_id][user_id] = amount
 
 # ======================
-# CONFIG HANDLING (PER GUILD)
+# CONFIG HANDLING
 # ======================
 
 def load_config():
@@ -101,7 +97,7 @@ def has_permission(interaction: discord.Interaction):
     return any(role_id in allowed_roles for role_id in user_roles)
 
 # ======================
-# LOGGING
+# LOGGING (FIXED)
 # ======================
 
 async def send_log(interaction, action, member, amount, new_balance):
@@ -111,9 +107,13 @@ async def send_log(interaction, action, member, amount, new_balance):
     if not channel_id:
         return
 
-    channel = client.get_channel(channel_id)
-    if not channel:
-        return
+    # ✅ FIXED CHANNEL FETCH
+    channel = interaction.guild.get_channel(channel_id)
+    if channel is None:
+        try:
+            channel = await client.fetch_channel(channel_id)
+        except:
+            return
 
     embed = discord.Embed(
         title="📊 Balance Update",
@@ -163,7 +163,10 @@ async def add(interaction: discord.Interaction, member: discord.Member, amount: 
         return
 
     data = load_data()
-    new_balance = get_balance(data, interaction.guild.id, member.id) + amount
+
+    current = get_balance(data, interaction.guild.id, member.id)
+    new_balance = current + amount
+
     set_balance(data, interaction.guild.id, member.id, new_balance)
     save_data(data)
 
@@ -179,7 +182,10 @@ async def subtract(interaction: discord.Interaction, member: discord.Member, amo
         return
 
     data = load_data()
-    new_balance = get_balance(data, interaction.guild.id, member.id) - amount
+
+    current = get_balance(data, interaction.guild.id, member.id)
+    new_balance = current - amount
+
     set_balance(data, interaction.guild.id, member.id, new_balance)
     save_data(data)
 
@@ -202,7 +208,7 @@ async def setlogchannel(interaction: discord.Interaction, channel: discord.TextC
     if guild_id not in config:
         config[guild_id] = {"allowed_roles": [], "log_channel": None}
 
-    config[guild_id]["log_channel"] = channel.id
+    config[guild_id]["log_channel"] = int(channel.id)  # ✅ force int
     save_config(config)
 
     await interaction.response.send_message(f"✅ Log channel set to {channel.mention}")
@@ -227,63 +233,10 @@ async def setrole(interaction: discord.Interaction, role: discord.Role):
     config[guild_id]["allowed_roles"] = roles
     save_config(config)
 
-    await interaction.response.send_message(f"✅ Added {role.mention} to allowed roles")
-
-@tree.command(name="removerole")
-async def removerole(interaction: discord.Interaction, role: discord.Role):
-    if not interaction.user.guild_permissions.administrator:
-        await interaction.response.send_message("❌ Admin only", ephemeral=True)
-        return
-
-    config = load_config()
-    guild_id = str(interaction.guild.id)
-
-    if guild_id not in config:
-        config[guild_id] = {"allowed_roles": [], "log_channel": None}
-
-    roles = config[guild_id].get("allowed_roles", [])
-
-    if role.id in roles:
-        roles.remove(role.id)
-
-    config[guild_id]["allowed_roles"] = roles
-    save_config(config)
-
-    await interaction.response.send_message(f"🗑️ Removed {role.mention} from allowed roles")
-    
-@tree.command(name="viewconfig")
-async def viewconfig(interaction: discord.Interaction):
-    if not interaction.user.guild_permissions.administrator:
-        await interaction.response.send_message("❌ Admin only", ephemeral=True)
-        return
-
-    guild_config = get_guild_config(interaction.guild.id)
-
-    log_channel_id = guild_config.get("log_channel")
-    allowed_roles = guild_config.get("allowed_roles", [])
-
-    log_channel = (
-        f"<#{log_channel_id}>" if log_channel_id else "Not set"
-    )
-
-    if allowed_roles:
-        roles_formatted = " ".join([f"<@&{role_id}>" for role_id in allowed_roles])
-    else:
-        roles_formatted = "None"
-
-    embed = discord.Embed(
-        title="⚙️ Server Configuration",
-        color=discord.Color.blue()
-    )
-
-    embed.add_field(name="🆔 Server ID", value=str(interaction.guild.id), inline=False)
-    embed.add_field(name="📊 Log Channel", value=log_channel, inline=False)
-    embed.add_field(name="🔐 Allowed Roles", value=roles_formatted, inline=False)
-
-    await interaction.response.send_message(embed=embed)
+    await interaction.response.send_message(f"✅ Added {role.mention}")
 
 # ======================
-# RUN BOT (AUTO-RESTART)
+# RUN BOT
 # ======================
 
 print("🚀 Starting bot...")

@@ -170,16 +170,16 @@ async def add(interaction: discord.Interaction, member: discord.User, amount: in
 # ➖ SUBTRACT (UPDATED 🔥)
 @tree.command(name="subtract")
 @app_commands.describe(
-    member="VIP user losing coins",
+    vip_user="VIP user spending coins",
     amount="Amount to subtract",
-    target="Target user (name if no link)",
+    target_user="Target user (optional if link provided)",
     link="Optional VRChat profile link"
 )
 async def subtract(
     interaction: discord.Interaction,
-    member: discord.User,
+    vip_user: discord.User,
     amount: int,
-    target: str,
+    target_user: str = None,
     link: str = None
 ):
     await interaction.response.defer()
@@ -192,25 +192,34 @@ async def subtract(
         await interaction.followup.send("❌ Amount must be positive", ephemeral=True)
         return
 
+    # ❗ Require at least one
+    if not target_user and not link:
+        await interaction.followup.send(
+            "❌ You must provide a target_user or a VRChat link",
+            ephemeral=True
+        )
+        return
+
     data = load_data()
-    current = get_balance(data, interaction.guild.id, member.id)
+    current = get_balance(data, interaction.guild.id, vip_user.id)
     new_balance = max(0, current - amount)
 
-    set_balance(data, interaction.guild.id, member.id, new_balance)
+    set_balance(data, interaction.guild.id, vip_user.id, new_balance)
     save_data(data)
 
-    vrc_user = extract_vrc_user(link) if link else target
-    if not vrc_user:
-        vrc_user = target
+    # 🎯 Extract or fallback
+    vrc_user = extract_vrc_user(link) if link else None
+    final_target = vrc_user if vrc_user else target_user
 
+    # 🔥 CLEAN EMBED
     embed = discord.Embed(
         title="🚫 Ban Token Used",
-        description=f"**🎯 Target User:** `{vrc_user}`",
+        description=f"**🎯 Target User:** `{final_target}`",
         color=discord.Color.red(),
         timestamp=datetime.utcnow()
     )
 
-    embed.add_field(name="👤 VIP User", value=member.mention, inline=True)
+    embed.add_field(name="👤 VIP User", value=vip_user.mention, inline=True)
     embed.add_field(name="🛠 Processed By", value=interaction.user.mention, inline=True)
     embed.add_field(name="💰 Coins Used", value=str(amount), inline=True)
 
@@ -225,6 +234,19 @@ async def subtract(
 
     await interaction.followup.send(embed=embed)
 
+    # 📜 LOG CHANNEL
+    guild_config = get_guild_config(interaction.guild.id)
+    channel_id = guild_config.get("log_channel")
+
+    if channel_id:
+        channel = interaction.guild.get_channel(channel_id)
+        if channel is None:
+            try:
+                channel = await client.fetch_channel(channel_id)
+            except:
+                return
+
+        await channel.send(embed=embed)
     # SEND TO LOG CHANNEL
     guild_config = get_guild_config(interaction.guild.id)
     channel_id = guild_config.get("log_channel")

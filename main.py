@@ -97,36 +97,16 @@ def has_permission(interaction: discord.Interaction):
     return any(role_id in allowed_roles for role_id in user_roles)
 
 # ======================
-# LOGGING
+# VRCHAT HELPER
 # ======================
 
-async def send_log(interaction, action, member, amount, new_balance):
-    guild_config = get_guild_config(interaction.guild.id)
-    channel_id = guild_config.get("log_channel")
-
-    if not channel_id:
-        return
-
-    channel = interaction.guild.get_channel(channel_id)
-    if channel is None:
-        try:
-            channel = await client.fetch_channel(channel_id)
-        except:
-            return
-
-    embed = discord.Embed(
-        title="📊 Balance Update",
-        color=discord.Color.green() if action == "ADD" else discord.Color.red(),
-        timestamp=datetime.utcnow()
-    )
-
-    embed.add_field(name="Action", value=action)
-    embed.add_field(name="User", value=f"<@{member.id}>")
-    embed.add_field(name="Amount", value=str(amount))
-    embed.add_field(name="New Balance", value=str(new_balance))
-    embed.add_field(name="Handled By", value=interaction.user.mention)
-
-    await channel.send(embed=embed)
+def extract_vrc_user(link: str):
+    try:
+        if link and "vrchat.com" in link and "/user/" in link:
+            return link.split("/user/")[1]
+    except:
+        pass
+    return None
 
 # ======================
 # EVENTS
@@ -143,7 +123,7 @@ async def on_ready():
 # COMMANDS
 # ======================
 
-# 💰 BALANCE (BANK STYLE EMBED)
+# 💰 BALANCE
 @tree.command(name="balance")
 async def balance(interaction: discord.Interaction, member: discord.User = None):
     member = member or interaction.user
@@ -186,11 +166,22 @@ async def add(interaction: discord.Interaction, member: discord.User, amount: in
     save_data(data)
 
     await interaction.followup.send(f"✅ Added {amount} coins to <@{member.id}>")
-    await send_log(interaction, "ADD", member, amount, new_balance)
 
-# ➖ SUBTRACT
+# ➖ SUBTRACT (UPDATED 🔥)
 @tree.command(name="subtract")
-async def subtract(interaction: discord.Interaction, member: discord.User, amount: int):
+@app_commands.describe(
+    member="VIP user losing coins",
+    amount="Amount to subtract",
+    target="Target user (name if no link)",
+    link="Optional VRChat profile link"
+)
+async def subtract(
+    interaction: discord.Interaction,
+    member: discord.User,
+    amount: int,
+    target: str,
+    link: str = None
+):
     await interaction.response.defer()
 
     if not has_permission(interaction):
@@ -208,8 +199,45 @@ async def subtract(interaction: discord.Interaction, member: discord.User, amoun
     set_balance(data, interaction.guild.id, member.id, new_balance)
     save_data(data)
 
-    await interaction.followup.send(f"➖ Subtracted {amount} coins from <@{member.id}>")
-    await send_log(interaction, "SUBTRACT", member, amount, new_balance)
+    vrc_user = extract_vrc_user(link) if link else target
+    if not vrc_user:
+        vrc_user = target
+
+    embed = discord.Embed(
+        title="🚫 Ban Token Used",
+        description=f"**🎯 Target User:** `{vrc_user}`",
+        color=discord.Color.red(),
+        timestamp=datetime.utcnow()
+    )
+
+    embed.add_field(name="👤 VIP User", value=member.mention, inline=True)
+    embed.add_field(name="🛠 Processed By", value=interaction.user.mention, inline=True)
+    embed.add_field(name="💰 Coins Used", value=str(amount), inline=True)
+
+    if link:
+        embed.add_field(
+            name="🌐 VRChat Profile",
+            value=f"[Click to View Profile]({link})",
+            inline=False
+        )
+
+    embed.set_footer(text="Jungle VIP System • Ban Record")
+
+    await interaction.followup.send(embed=embed)
+
+    # SEND TO LOG CHANNEL
+    guild_config = get_guild_config(interaction.guild.id)
+    channel_id = guild_config.get("log_channel")
+
+    if channel_id:
+        channel = interaction.guild.get_channel(channel_id)
+        if channel is None:
+            try:
+                channel = await client.fetch_channel(channel_id)
+            except:
+                return
+
+        await channel.send(embed=embed)
 
 # 🔁 TRANSFER
 @tree.command(name="transfer")
@@ -255,34 +283,8 @@ async def transfer(
         f"🔁 Transferred **{amount} coins** from <@{from_user.id}> to <@{to_user.id}>"
     )
 
-    # LOG
-    guild_config = get_guild_config(interaction.guild.id)
-    channel_id = guild_config.get("log_channel")
-
-    if channel_id:
-        channel = interaction.guild.get_channel(channel_id)
-        if channel is None:
-            try:
-                channel = await client.fetch_channel(channel_id)
-            except:
-                return
-
-        embed = discord.Embed(
-            title="🔁 Transfer Log",
-            description=f"<@{from_user.id}> ➜ <@{to_user.id}>",
-            color=discord.Color.blue(),
-            timestamp=datetime.utcnow()
-        )
-
-        embed.add_field(name="Amount", value=str(amount), inline=False)
-        embed.add_field(name="From New Balance", value=str(new_from_balance))
-        embed.add_field(name="To New Balance", value=str(new_to_balance))
-        embed.add_field(name="Handled By", value=interaction.user.mention)
-
-        await channel.send(embed=embed)
-
 # ======================
-# ADMIN COMMANDS
+# ADMIN
 # ======================
 
 @tree.command(name="setlogchannel")
@@ -325,7 +327,7 @@ async def setrole(interaction: discord.Interaction, role: discord.Role):
     await interaction.response.send_message(f"✅ Added {role.mention}")
 
 # ======================
-# RUN BOT
+# RUN
 # ======================
 
 print("🚀 Starting bot...")

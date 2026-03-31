@@ -97,16 +97,36 @@ def has_permission(interaction: discord.Interaction):
     return any(role_id in allowed_roles for role_id in user_roles)
 
 # ======================
-# VRCHAT HELPER
+# HELPERS
 # ======================
 
-def extract_vrc_user(link: str):
+def extract_vrc_user(link):
+    if not link:
+        return None
     try:
-        if link and "vrchat.com" in link and "/user/" in link:
-            return link.split("/user/")[1]
+        return link.strip("/").split("/")[-1]
     except:
-        pass
-    return None
+        return None
+
+# ======================
+# LOGGING
+# ======================
+
+async def send_log(interaction, embed):
+    guild_config = get_guild_config(interaction.guild.id)
+    channel_id = guild_config.get("log_channel")
+
+    if not channel_id:
+        return
+
+    channel = interaction.guild.get_channel(channel_id)
+    if channel is None:
+        try:
+            channel = await client.fetch_channel(channel_id)
+        except:
+            return
+
+    await channel.send(embed=embed)
 
 # ======================
 # EVENTS
@@ -123,7 +143,6 @@ async def on_ready():
 # COMMANDS
 # ======================
 
-# 💰 BALANCE
 @tree.command(name="balance")
 async def balance(interaction: discord.Interaction, member: discord.User = None):
     member = member or interaction.user
@@ -154,25 +173,29 @@ async def add(interaction: discord.Interaction, member: discord.User, amount: in
         await interaction.followup.send("❌ No permission", ephemeral=True)
         return
 
-    if amount <= 0:
-        await interaction.followup.send("❌ Amount must be positive", ephemeral=True)
-        return
-
     data = load_data()
-    current = get_balance(data, interaction.guild.id, member.id)
-    new_balance = current + amount
-
+    new_balance = get_balance(data, interaction.guild.id, member.id) + amount
     set_balance(data, interaction.guild.id, member.id, new_balance)
     save_data(data)
 
-    await interaction.followup.send(f"✅ Added {amount} coins to <@{member.id}>")
+    embed = discord.Embed(
+        title="➕ Coins Added",
+        color=discord.Color.green(),
+        timestamp=datetime.utcnow()
+    )
+    embed.add_field(name="User", value=member.mention)
+    embed.add_field(name="Amount", value=str(amount))
+    embed.add_field(name="New Balance", value=str(new_balance))
 
-# ➖ SUBTRACT (UPDATED 🔥)
+    await interaction.followup.send(embed=embed)
+    await send_log(interaction, embed)
+
+# ➖ SUBTRACT (FIXED)
 @tree.command(name="subtract")
 @app_commands.describe(
     vip_user="VIP user spending coins",
     amount="Amount to subtract",
-    target_user="Target user (optional if link provided)",
+    target_user="Target user (optional)",
     link="Optional VRChat profile link"
 )
 async def subtract(
@@ -188,78 +211,35 @@ async def subtract(
         await interaction.followup.send("❌ No permission", ephemeral=True)
         return
 
-    if amount <= 0:
-        await interaction.followup.send("❌ Amount must be positive", ephemeral=True)
-        return
-
-    # ❗ Require at least one
     if not target_user and not link:
-        await interaction.followup.send(
-            "❌ You must provide a target_user or a VRChat link",
-            ephemeral=True
-        )
+        await interaction.followup.send("❌ Provide target_user or link", ephemeral=True)
         return
 
     data = load_data()
-    current = get_balance(data, interaction.guild.id, vip_user.id)
-    new_balance = max(0, current - amount)
-
+    new_balance = max(0, get_balance(data, interaction.guild.id, vip_user.id) - amount)
     set_balance(data, interaction.guild.id, vip_user.id, new_balance)
     save_data(data)
 
-    # 🎯 Extract or fallback
-    vrc_user = extract_vrc_user(link) if link else None
+    vrc_user = extract_vrc_user(link)
     final_target = vrc_user if vrc_user else target_user
 
-    # 🔥 CLEAN EMBED
     embed = discord.Embed(
         title="🚫 Ban Token Used",
-        description=f"**🎯 Target User:** `{final_target}`",
+        description=f"🎯 Target: `{final_target}`",
         color=discord.Color.red(),
         timestamp=datetime.utcnow()
     )
 
-    embed.add_field(name="👤 VIP User", value=vip_user.mention, inline=True)
-    embed.add_field(name="🛠 Processed By", value=interaction.user.mention, inline=True)
-    embed.add_field(name="💰 Coins Used", value=str(amount), inline=True)
+    embed.add_field(name="VIP User", value=vip_user.mention)
+    embed.add_field(name="Coins Used", value=str(amount))
+    embed.add_field(name="New Balance", value=str(new_balance))
+    embed.add_field(name="Handled By", value=interaction.user.mention)
 
     if link:
-        embed.add_field(
-            name="🌐 VRChat Profile",
-            value=f"[Click to View Profile]({link})",
-            inline=False
-        )
-
-    embed.set_footer(text="Jungle VIP System • Ban Record")
+        embed.add_field(name="Profile", value=link, inline=False)
 
     await interaction.followup.send(embed=embed)
-
-    # 📜 LOG CHANNEL
-    guild_config = get_guild_config(interaction.guild.id)
-    channel_id = guild_config.get("log_channel")
-
-    if channel_id:
-        channel = interaction.guild.get_channel(channel_id)
-        if channel is None:
-            try:
-                channel = await client.fetch_channel(channel_id)
-            except:
-                return
-
-        await channel.send(embed=embed)
-    # SEND TO LOG CHANNEL
-    guild_config = get_guild_config(interaction.guild.id)
-    channel_id = guild_config.get("log_channel")
-
-    if channel_id:
-        channel = interaction.guild.get_channel(channel_id)
-        if channel is None:
-            try:
-                channel = await client.fetch_channel(channel_id)
-            except:
-                return
-
-        await channel.send(embed=embed)
+    await send_log(interaction, embed)
 
 # 🔁 TRANSFER
 @tree.command(name="transfer")
@@ -275,35 +255,32 @@ async def transfer(
         await interaction.followup.send("❌ No permission", ephemeral=True)
         return
 
-    if amount <= 0:
-        await interaction.followup.send("❌ Amount must be positive", ephemeral=True)
-        return
-
-    if from_user.id == to_user.id:
-        await interaction.followup.send("❌ Cannot transfer to yourself", ephemeral=True)
-        return
-
     data = load_data()
 
-    from_balance = get_balance(data, interaction.guild.id, from_user.id)
-
-    if from_balance < amount:
+    if get_balance(data, interaction.guild.id, from_user.id) < amount:
         await interaction.followup.send("❌ Not enough balance", ephemeral=True)
         return
 
-    to_balance = get_balance(data, interaction.guild.id, to_user.id)
+    set_balance(data, interaction.guild.id, from_user.id,
+                get_balance(data, interaction.guild.id, from_user.id) - amount)
 
-    new_from_balance = from_balance - amount
-    new_to_balance = to_balance + amount
-
-    set_balance(data, interaction.guild.id, from_user.id, new_from_balance)
-    set_balance(data, interaction.guild.id, to_user.id, new_to_balance)
+    set_balance(data, interaction.guild.id, to_user.id,
+                get_balance(data, interaction.guild.id, to_user.id) + amount)
 
     save_data(data)
 
-    await interaction.followup.send(
-        f"🔁 Transferred **{amount} coins** from <@{from_user.id}> to <@{to_user.id}>"
+    embed = discord.Embed(
+        title="🔁 Transfer",
+        color=discord.Color.blue(),
+        timestamp=datetime.utcnow()
     )
+
+    embed.add_field(name="From", value=from_user.mention)
+    embed.add_field(name="To", value=to_user.mention)
+    embed.add_field(name="Amount", value=str(amount))
+
+    await interaction.followup.send(embed=embed)
+    await send_log(interaction, embed)
 
 # ======================
 # ADMIN
@@ -339,7 +316,6 @@ async def setrole(interaction: discord.Interaction, role: discord.Role):
         config[guild_id] = {"allowed_roles": [], "log_channel": None}
 
     roles = config[guild_id].get("allowed_roles", [])
-
     if role.id not in roles:
         roles.append(role.id)
 

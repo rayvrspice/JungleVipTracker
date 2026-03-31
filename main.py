@@ -26,7 +26,8 @@ def load_data():
             return {}
         with open(DATA_FILE, "r") as f:
             return json.load(f)
-    except:
+    except Exception as e:
+        print(f"Error loading data: {e}")
         return {}
 
 def save_data(data):
@@ -40,7 +41,6 @@ def get_balance(data, guild_id, user_id):
     if guild_id not in data:
         data[guild_id] = {}
 
-    # ✅ AUTO CREATE USER
     if user_id not in data[guild_id]:
         data[guild_id][user_id] = 0
 
@@ -97,7 +97,7 @@ def has_permission(interaction: discord.Interaction):
     return any(role_id in allowed_roles for role_id in user_roles)
 
 # ======================
-# LOGGING (FIXED)
+# LOGGING
 # ======================
 
 async def send_log(interaction, action, member, amount, new_balance):
@@ -107,7 +107,6 @@ async def send_log(interaction, action, member, amount, new_balance):
     if not channel_id:
         return
 
-    # ✅ FIXED CHANNEL FETCH
     channel = interaction.guild.get_channel(channel_id)
     if channel is None:
         try:
@@ -122,7 +121,7 @@ async def send_log(interaction, action, member, amount, new_balance):
     )
 
     embed.add_field(name="Action", value=action)
-    embed.add_field(name="User", value=member.mention)
+    embed.add_field(name="User", value=f"<@{member.id}>")
     embed.add_field(name="Amount", value=str(amount))
     embed.add_field(name="New Balance", value=str(new_balance))
     embed.add_field(name="Handled By", value=interaction.user.mention)
@@ -144,53 +143,143 @@ async def on_ready():
 # COMMANDS
 # ======================
 
+# 💰 BALANCE (BANK STYLE EMBED)
 @tree.command(name="balance")
-async def balance(interaction: discord.Interaction, member: discord.Member = None):
+async def balance(interaction: discord.Interaction, member: discord.User = None):
     member = member or interaction.user
+
     data = load_data()
     bal = get_balance(data, interaction.guild.id, member.id)
 
-    await interaction.response.send_message(
-        f"{member.mention} has {bal} coins."
+    embed = discord.Embed(
+        description=f"💰 **{member.name}**'s balance: **{bal} coins**",
+        color=discord.Color.gold()
     )
 
+    embed.set_author(
+        name=f"{member.name}'s Account",
+        icon_url=member.display_avatar.url
+    )
+
+    embed.set_footer(text="VIP Economy System")
+
+    await interaction.response.send_message(embed=embed)
+
+# ➕ ADD
 @tree.command(name="add")
-async def add(interaction: discord.Interaction, member: discord.Member, amount: int):
+async def add(interaction: discord.Interaction, member: discord.User, amount: int):
     await interaction.response.defer()
 
     if not has_permission(interaction):
         await interaction.followup.send("❌ No permission", ephemeral=True)
         return
 
-    data = load_data()
+    if amount <= 0:
+        await interaction.followup.send("❌ Amount must be positive", ephemeral=True)
+        return
 
+    data = load_data()
     current = get_balance(data, interaction.guild.id, member.id)
     new_balance = current + amount
 
     set_balance(data, interaction.guild.id, member.id, new_balance)
     save_data(data)
 
-    await interaction.followup.send(f"✅ Added {amount} coins to {member.mention}")
+    await interaction.followup.send(f"✅ Added {amount} coins to <@{member.id}>")
     await send_log(interaction, "ADD", member, amount, new_balance)
 
+# ➖ SUBTRACT
 @tree.command(name="subtract")
-async def subtract(interaction: discord.Interaction, member: discord.Member, amount: int):
+async def subtract(interaction: discord.Interaction, member: discord.User, amount: int):
     await interaction.response.defer()
 
     if not has_permission(interaction):
         await interaction.followup.send("❌ No permission", ephemeral=True)
         return
 
-    data = load_data()
+    if amount <= 0:
+        await interaction.followup.send("❌ Amount must be positive", ephemeral=True)
+        return
 
+    data = load_data()
     current = get_balance(data, interaction.guild.id, member.id)
-    new_balance = current - amount
+    new_balance = max(0, current - amount)
 
     set_balance(data, interaction.guild.id, member.id, new_balance)
     save_data(data)
 
-    await interaction.followup.send(f"➖ Subtracted {amount} coins from {member.mention}")
+    await interaction.followup.send(f"➖ Subtracted {amount} coins from <@{member.id}>")
     await send_log(interaction, "SUBTRACT", member, amount, new_balance)
+
+# 🔁 TRANSFER
+@tree.command(name="transfer")
+async def transfer(
+    interaction: discord.Interaction,
+    from_user: discord.User,
+    to_user: discord.User,
+    amount: int
+):
+    await interaction.response.defer()
+
+    if not has_permission(interaction):
+        await interaction.followup.send("❌ No permission", ephemeral=True)
+        return
+
+    if amount <= 0:
+        await interaction.followup.send("❌ Amount must be positive", ephemeral=True)
+        return
+
+    if from_user.id == to_user.id:
+        await interaction.followup.send("❌ Cannot transfer to yourself", ephemeral=True)
+        return
+
+    data = load_data()
+
+    from_balance = get_balance(data, interaction.guild.id, from_user.id)
+
+    if from_balance < amount:
+        await interaction.followup.send("❌ Not enough balance", ephemeral=True)
+        return
+
+    to_balance = get_balance(data, interaction.guild.id, to_user.id)
+
+    new_from_balance = from_balance - amount
+    new_to_balance = to_balance + amount
+
+    set_balance(data, interaction.guild.id, from_user.id, new_from_balance)
+    set_balance(data, interaction.guild.id, to_user.id, new_to_balance)
+
+    save_data(data)
+
+    await interaction.followup.send(
+        f"🔁 Transferred **{amount} coins** from <@{from_user.id}> to <@{to_user.id}>"
+    )
+
+    # LOG
+    guild_config = get_guild_config(interaction.guild.id)
+    channel_id = guild_config.get("log_channel")
+
+    if channel_id:
+        channel = interaction.guild.get_channel(channel_id)
+        if channel is None:
+            try:
+                channel = await client.fetch_channel(channel_id)
+            except:
+                return
+
+        embed = discord.Embed(
+            title="🔁 Transfer Log",
+            description=f"<@{from_user.id}> ➜ <@{to_user.id}>",
+            color=discord.Color.blue(),
+            timestamp=datetime.utcnow()
+        )
+
+        embed.add_field(name="Amount", value=str(amount), inline=False)
+        embed.add_field(name="From New Balance", value=str(new_from_balance))
+        embed.add_field(name="To New Balance", value=str(new_to_balance))
+        embed.add_field(name="Handled By", value=interaction.user.mention)
+
+        await channel.send(embed=embed)
 
 # ======================
 # ADMIN COMMANDS
@@ -208,7 +297,7 @@ async def setlogchannel(interaction: discord.Interaction, channel: discord.TextC
     if guild_id not in config:
         config[guild_id] = {"allowed_roles": [], "log_channel": None}
 
-    config[guild_id]["log_channel"] = int(channel.id)  # ✅ force int
+    config[guild_id]["log_channel"] = int(channel.id)
     save_config(config)
 
     await interaction.response.send_message(f"✅ Log channel set to {channel.mention}")

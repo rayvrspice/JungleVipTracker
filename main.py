@@ -118,6 +118,7 @@ async def on_ready():
 # COMMANDS
 # ======================
 
+# balance 
 @tree.command(name="balance")
 async def balance(interaction: discord.Interaction, member: discord.User = None):
     member = member or interaction.user
@@ -135,6 +136,7 @@ async def balance(interaction: discord.Interaction, member: discord.User = None)
     await interaction.response.send_message(embed=embed)
 
 # ADD
+
 @tree.command(name="add")
 async def add(interaction: discord.Interaction, member: discord.User, amount: int):
     await interaction.response.defer()
@@ -147,13 +149,38 @@ async def add(interaction: discord.Interaction, member: discord.User, amount: in
     set_balance(data, interaction.guild.id, member.id, new_balance)
     save_data(data)
 
-    embed = discord.Embed(title="➕ Added", color=discord.Color.green())
-    embed.add_field(name="User", value=member.mention)
-    embed.add_field(name="Amount", value=amount)
-    embed.add_field(name="Balance", value=new_balance)
+    # 💰 USER VIEW (BANK STYLE)
+    embed = discord.Embed(
+        title="💰 Deposit Successful",
+        description=f"**{amount} coins** were added to {member.mention}’s bag.",
+        color=discord.Color.green()
+    )
+
+    embed.add_field(
+        name="📊 New Balance",
+        value=f"**{new_balance} coins**",
+        inline=False
+    )
+
+    embed.set_footer(text="Jungle VIP Banking System")
+    embed.set_thumbnail(url=member.display_avatar.url)
 
     await interaction.followup.send(embed=embed)
-    await send_log(interaction, embed)
+
+    # 📊 LOG VIEW (CLEAN + GREEN)
+    log_embed = discord.Embed(
+        title="📊 Balance Update",
+        color=discord.Color.green(),
+        timestamp=datetime.utcnow()
+    )
+
+    log_embed.add_field(name="Action", value="ADD")
+    log_embed.add_field(name="User", value=member.mention)
+    log_embed.add_field(name="Amount", value=str(amount))
+    log_embed.add_field(name="New Balance", value=str(new_balance))
+    log_embed.add_field(name="Handled By", value=interaction.user.mention, inline=False)
+
+    await send_log(interaction, log_embed)
 
 # SUBTRACT (FINAL CLEAN VERSION)
 @tree.command(name="subtract")

@@ -210,8 +210,12 @@ async def subtract(
 
     embed.set_footer(text="Jungle VIP System")
 
+if link:
+    await interaction.followup.send(content=link, embed=embed)
+else:
     await interaction.followup.send(embed=embed)
-    await send_log(interaction, embed)
+    
+await send_log(interaction, embed)
 
 # TRANSFER
 @tree.command(name="transfer")

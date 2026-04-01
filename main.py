@@ -208,13 +208,15 @@ async def subtract(
 
     embed.set_footer(text="Jungle VIP System")
 
-    # ✅ MUST BE INSIDE FUNCTION
+    # Send embed FIRST
+    await interaction.followup.send(embed=embed)
+
+# Send link separately to force preview
     if link:
-        await interaction.followup.send(content=link, embed=embed)
-    else:
-        await interaction.followup.send(embed=embed)
+        await interaction.followup.send(link)
 
     await send_log(interaction, embed)
+
    
 
 # TRANSFER

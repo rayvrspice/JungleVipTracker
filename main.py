@@ -4,8 +4,6 @@ import json
 import os
 from datetime import datetime
 from dotenv import load_dotenv
-import requests
-from bs4 import BeautifulSoup
 
 load_dotenv()
 
@@ -89,25 +87,6 @@ def has_permission(interaction: discord.Interaction):
     return any(role_id in allowed_roles for role_id in user_roles)
 
 # ======================
-# VRCHAT NAME SCRAPER
-# ======================
-
-def get_vrc_username(link):
-    try:
-        headers = {"User-Agent": "Mozilla/5.0"}
-        r = requests.get(link, headers=headers, timeout=5)
-        soup = BeautifulSoup(r.text, "html.parser")
-
-        title = soup.find("title")
-
-        if title:
-            return title.text.replace("VRChat - ", "").strip()
-
-        return "VRChat User"
-    except:
-        return "VRChat User"
-
-# ======================
 # LOGGING
 # ======================
 
@@ -176,13 +155,13 @@ async def add(interaction: discord.Interaction, member: discord.User, amount: in
     await interaction.followup.send(embed=embed)
     await send_log(interaction, embed)
 
-# SUBTRACT (FINAL FIXED)
+# SUBTRACT (FINAL CLEAN VERSION)
 @tree.command(name="subtract")
 @app_commands.describe(
     vip_user="VIP using coins",
     amount="Amount",
-    target_user="Name if no link",
-    link="VRChat profile link"
+    target_user="Target name (recommended)",
+    link="Optional VRChat profile link"
 )
 async def subtract(
     interaction: discord.Interaction,
@@ -197,18 +176,20 @@ async def subtract(
         return await interaction.followup.send("❌ No permission", ephemeral=True)
 
     if not target_user and not link:
-        return await interaction.followup.send("❌ Provide name or link", ephemeral=True)
+        return await interaction.followup.send("❌ Provide a target name or link", ephemeral=True)
 
     data = load_data()
     new_balance = max(0, get_balance(data, interaction.guild.id, vip_user.id) - amount)
     set_balance(data, interaction.guild.id, vip_user.id, new_balance)
     save_data(data)
 
-    # 🔥 GET REAL NAME
-    if link:
-        final_target = get_vrc_username(link)
-    else:
+    # 🎯 TARGET (INSTANT)
+    if target_user:
         final_target = target_user
+    elif link:
+        final_target = "VRChat User"
+    else:
+        final_target = "Unknown"
 
     embed = discord.Embed(
         title="🚫 Ban Token Used",
@@ -216,14 +197,18 @@ async def subtract(
         timestamp=datetime.utcnow()
     )
 
-    embed.add_field(name="🎯 Target", value=final_target, inline=False)
+    embed.add_field(name="🎯 Target", value=f"**{final_target}**", inline=False)
     embed.add_field(name="👤 VIP", value=vip_user.mention)
-    embed.add_field(name="💰 Used", value=amount)
-    embed.add_field(name="📊 Balance", value=new_balance)
-    embed.add_field(name="🛠 Staff", value=interaction.user.mention)
+    embed.add_field(name="💰 Used", value=f"{amount} coins")
+    embed.add_field(name="📊 Balance", value=str(new_balance))
+
+    # ✅ CHANGED HERE
+    embed.add_field(name="🛠 Handled By", value=interaction.user.mention, inline=False)
 
     if link:
-        embed.add_field(name="🔗 Profile", value=link, inline=False)
+        embed.add_field(name="🔗 Profile", value=f"[Open VRChat Profile]({link})", inline=False)
+
+    embed.set_footer(text="Jungle VIP System")
 
     await interaction.followup.send(embed=embed)
     await send_log(interaction, embed)

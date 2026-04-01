@@ -247,8 +247,14 @@ async def subtract(
    
 
 # TRANSFER
+
 @tree.command(name="transfer")
-async def transfer(interaction: discord.Interaction, from_user: discord.User, to_user: discord.User, amount: int):
+async def transfer(
+    interaction: discord.Interaction,
+    from_user: discord.User,
+    to_user: discord.User,
+    amount: int
+):
     await interaction.response.defer()
 
     if not has_permission(interaction):
@@ -256,24 +262,63 @@ async def transfer(interaction: discord.Interaction, from_user: discord.User, to
 
     data = load_data()
 
-    if get_balance(data, interaction.guild.id, from_user.id) < amount:
+    from_balance = get_balance(data, interaction.guild.id, from_user.id)
+
+    if from_balance < amount:
         return await interaction.followup.send("❌ Not enough balance", ephemeral=True)
 
-    set_balance(data, interaction.guild.id, from_user.id,
-                get_balance(data, interaction.guild.id, from_user.id) - amount)
+    # 💸 UPDATE BALANCES
+    new_from_balance = from_balance - amount
+    new_to_balance = get_balance(data, interaction.guild.id, to_user.id) + amount
 
-    set_balance(data, interaction.guild.id, to_user.id,
-                get_balance(data, interaction.guild.id, to_user.id) + amount)
-
+    set_balance(data, interaction.guild.id, from_user.id, new_from_balance)
+    set_balance(data, interaction.guild.id, to_user.id, new_to_balance)
     save_data(data)
 
-    embed = discord.Embed(title="🔁 Transfer", color=discord.Color.blue())
-    embed.add_field(name="From", value=from_user.mention)
-    embed.add_field(name="To", value=to_user.mention)
-    embed.add_field(name="Amount", value=amount)
+    # 💰 USER VIEW (BANK STYLE)
+    embed = discord.Embed(
+        title="🔁 Transfer Complete",
+        description=f"**{amount} coins** transferred from {from_user.mention} to {to_user.mention}.",
+        color=discord.Color.blurple()
+    )
+
+    embed.add_field(
+        name="📉 Sender Balance",
+        value=f"{from_user.mention}: **{new_from_balance} coins**",
+        inline=False
+    )
+
+    embed.add_field(
+        name="📈 Receiver Balance",
+        value=f"{to_user.mention}: **{new_to_balance} coins**",
+        inline=False
+    )
+
+    embed.add_field(
+        name="🛠 Handled By",
+        value=interaction.user.mention,
+        inline=False
+    )
+
+    embed.set_footer(text="Jungle VIP Banking System")
 
     await interaction.followup.send(embed=embed)
-    await send_log(interaction, embed)
+
+    # 📊 LOG VIEW
+    log_embed = discord.Embed(
+        title="📊 Balance Transfer",
+        color=discord.Color.blue(),
+        timestamp=datetime.utcnow()
+    )
+
+    log_embed.add_field(name="From", value=from_user.mention)
+    log_embed.add_field(name="To", value=to_user.mention)
+    log_embed.add_field(name="Amount", value=str(amount))
+    log_embed.add_field(name="Sender Balance", value=str(new_from_balance))
+    log_embed.add_field(name="Receiver Balance", value=str(new_to_balance))
+    log_embed.add_field(name="Handled By", value=interaction.user.mention, inline=False)
+
+    await send_log(interaction, log_embed)
 
 # ADMIN
 @tree.command(name="setlogchannel")

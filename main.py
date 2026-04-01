@@ -183,7 +183,7 @@ async def subtract(
     set_balance(data, interaction.guild.id, vip_user.id, new_balance)
     save_data(data)
 
-    # 🎯 TARGET (INSTANT)
+    # 🎯 TARGET
     if target_user:
         final_target = target_user
     elif link:
@@ -201,21 +201,21 @@ async def subtract(
     embed.add_field(name="👤 VIP", value=vip_user.mention)
     embed.add_field(name="💰 Used", value=f"{amount} coins")
     embed.add_field(name="📊 Balance", value=str(new_balance))
-
-    # ✅ CHANGED HERE
     embed.add_field(name="🛠 Handled By", value=interaction.user.mention, inline=False)
 
     if link:
-        embed.add_field(name="🔗 Profile", value=f"[Open VRChat Profile]({link})", inline=False)
+        embed.add_field(name="🔗 Profile", value=link, inline=False)
 
     embed.set_footer(text="Jungle VIP System")
 
-if link:
-    await interaction.followup.send(content=link, embed=embed)
-else:
-    await interaction.followup.send(embed=embed)
-    
-await send_log(interaction, embed)
+    # ✅ MUST BE INSIDE FUNCTION
+    if link:
+        await interaction.followup.send(content=link, embed=embed)
+    else:
+        await interaction.followup.send(embed=embed)
+
+    await send_log(interaction, embed)
+   
 
 # TRANSFER
 @tree.command(name="transfer")

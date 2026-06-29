@@ -320,6 +320,111 @@ async def transfer(
 
     await send_log(interaction, log_embed)
 
+#  Monthly VIP Coin Reward 
+@tree.command(name="monthlyvip")
+async def monthlyvip(interaction: discord.Interaction, role: discord.Role):
+    await interaction.response.defer()
+
+    # Uses the same permission system as /add, /subtract, /transfer
+    if not has_permission(interaction):
+        return await interaction.followup.send(
+            "❌ No permission",
+            ephemeral=True
+        )
+
+    data = load_data()
+
+    rewarded = 0
+    total_distributed = 0
+    coins_per_member = 5
+
+    for member in role.members:
+
+        # Skip bots
+        if member.bot:
+            continue
+
+        current_balance = get_balance(
+            data,
+            interaction.guild.id,
+            member.id
+        )
+
+        new_balance = current_balance + coins_per_member
+
+        set_balance(
+            data,
+            interaction.guild.id,
+            member.id,
+            new_balance
+        )
+
+        rewarded += 1
+        total_distributed += coins_per_member
+
+    save_data(data)
+
+    # USER-FACING EMBED
+    embed = discord.Embed(
+        title="🎁 Monthly VIP Coins Distributed",
+        description=(
+            f"Added **{coins_per_member} coins** to every member with "
+            f"{role.mention}"
+        ),
+        color=discord.Color.gold(),
+        timestamp=datetime.utcnow()
+    )
+
+    embed.add_field(
+        name="Members Rewarded",
+        value=str(rewarded),
+        inline=False
+    )
+
+    embed.set_footer(text="Jungle VIP Banking System")
+
+    await interaction.followup.send(embed=embed)
+
+    # DETAILED LOG EMBED
+    log_embed = discord.Embed(
+        title="📊 Monthly VIP Distribution",
+        color=discord.Color.gold(),
+        timestamp=datetime.utcnow()
+    )
+
+    log_embed.add_field(
+        name="VIP Role",
+        value=role.mention,
+        inline=False
+    )
+
+    log_embed.add_field(
+        name="Coins Per Member",
+        value=str(coins_per_member),
+        inline=True
+    )
+
+    log_embed.add_field(
+        name="Members Rewarded",
+        value=str(rewarded),
+        inline=True
+    )
+
+    log_embed.add_field(
+        name="Total Coins Distributed",
+        value=str(total_distributed),
+        inline=True
+    )
+
+    log_embed.add_field(
+        name="Handled By",
+        value=interaction.user.mention,
+        inline=False
+    )
+
+    await send_log(interaction, log_embed)
+
+
 # ADMIN
 @tree.command(name="setlogchannel")
 async def setlogchannel(interaction: discord.Interaction, channel: discord.TextChannel):

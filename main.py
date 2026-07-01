@@ -320,7 +320,9 @@ async def transfer(
 
     await send_log(interaction, log_embed)
 
-#  Monthly VIP Coin Reward 
+
+# Monthly VIP Coin Reward
+
 @tree.command(name="monthlyvip")
 async def monthlyvip(interaction: discord.Interaction, role: discord.Role):
     await interaction.response.defer()
@@ -338,6 +340,10 @@ async def monthlyvip(interaction: discord.Interaction, role: discord.Role):
     total_distributed = 0
     coins_per_member = 5
 
+    rewarded_members = []
+    previous_total = 0
+    new_total = 0
+
     for member in role.members:
 
         # Skip bots
@@ -350,14 +356,21 @@ async def monthlyvip(interaction: discord.Interaction, role: discord.Role):
             member.id
         )
 
-        new_balance = current_balance + coins_per_member
+        updated_balance = current_balance + coins_per_member
 
         set_balance(
             data,
             interaction.guild.id,
             member.id,
-            new_balance
+            updated_balance
         )
+
+        rewarded_members.append(
+            f"{member.mention}: {current_balance} → {updated_balance}"
+        )
+
+        previous_total += current_balance
+        new_total += updated_balance
 
         rewarded += 1
         total_distributed += coins_per_member
@@ -381,13 +394,19 @@ async def monthlyvip(interaction: discord.Interaction, role: discord.Role):
         inline=False
     )
 
+    embed.add_field(
+        name="Total Coins Distributed",
+        value=str(total_distributed),
+        inline=False
+    )
+
     embed.set_footer(text="Jungle VIP Banking System")
 
     await interaction.followup.send(embed=embed)
 
     # DETAILED LOG EMBED
     log_embed = discord.Embed(
-        title="📊 Monthly VIP Distribution",
+        title=f"📊 Monthly VIP Distribution - {datetime.utcnow().strftime('%B %Y')}",
         color=discord.Color.gold(),
         timestamp=datetime.utcnow()
     )
@@ -419,6 +438,39 @@ async def monthlyvip(interaction: discord.Interaction, role: discord.Role):
     log_embed.add_field(
         name="Handled By",
         value=interaction.user.mention,
+        inline=False
+    )
+
+    # Split recipient list across multiple fields if needed
+    recipient_chunks = []
+    current_chunk = ""
+
+    for entry in rewarded_members:
+        line = entry + "\n"
+
+        if len(current_chunk) + len(line) > 1000:
+            recipient_chunks.append(current_chunk)
+            current_chunk = line
+        else:
+            current_chunk += line
+
+    if current_chunk:
+        recipient_chunks.append(current_chunk)
+
+    for i, chunk in enumerate(recipient_chunks):
+        log_embed.add_field(
+            name="Recipients" if i == 0 else f"Recipients (Continued {i})",
+            value=chunk,
+            inline=False
+        )
+
+    log_embed.add_field(
+        name="Distribution Summary",
+        value=(
+            f"Previous Total: {previous_total}\n"
+            f"Coins Added: {total_distributed}\n"
+            f"New Total: {new_total}"
+        ),
         inline=False
     )
 

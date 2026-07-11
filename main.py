@@ -476,6 +476,95 @@ async def monthlyvip(interaction: discord.Interaction, role: discord.Role):
 
     await send_log(interaction, log_embed)
 
+# Shows leadership Board
+
+@tree.command(
+    name="leaderboard",
+    description="View the server coin leaderboard."
+)
+async def leaderboard(interaction: discord.Interaction):
+
+    data = load_data()
+
+    guild_id = str(interaction.guild.id)
+
+    if guild_id not in data:
+        return await interaction.response.send_message(
+            "No balances found.",
+            ephemeral=True
+        )
+
+    leaderboard_data = []
+
+    for member in interaction.guild.members:
+
+        if member.bot:
+            continue
+
+        balance = get_balance(
+            data,
+            interaction.guild.id,
+            member.id
+        )
+
+        if balance <= 0:
+            continue
+
+        leaderboard_data.append((member, balance))
+
+    leaderboard_data.sort(
+        key=lambda x: x[1],
+        reverse=True
+    )
+
+    if not leaderboard_data:
+        return await interaction.response.send_message(
+            "No members currently have any coins.",
+            ephemeral=True
+        )
+
+    lines = []
+
+    for position, (member, balance) in enumerate(
+        leaderboard_data[:10],
+        start=1
+    ):
+
+        if position == 1:
+            prefix = "🥇"
+        elif position == 2:
+            prefix = "🥈"
+        elif position == 3:
+            prefix = "🥉"
+        else:
+            prefix = f"#{position}"
+
+        lines.append(
+            f"{prefix} {member.mention} — **{balance}** Coins"
+        )
+
+    total_coins = sum(balance for _, balance in leaderboard_data)
+
+    embed = discord.Embed(
+        title="🏆 Coin Leaderboard",
+        description="\n".join(lines),
+        color=discord.Color.gold()
+    )
+
+    embed.add_field(
+        name="Total Coins In Circulation",
+        value=str(total_coins),
+        inline=False
+    )
+
+    embed.set_footer(
+        text=f"Showing Top {min(10, len(leaderboard_data))} of {len(leaderboard_data)} members • Zero balances hidden"
+    )
+
+    await interaction.response.send_message(
+        embed=embed
+    )
+
 
 # ADMIN
 @tree.command(name="setlogchannel")

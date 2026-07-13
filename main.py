@@ -9,6 +9,7 @@ load_dotenv()
 
 DATA_FILE = "/home/ubuntu/JungleVipTracker/balances.json"
 CONFIG_FILE = "/home/ubuntu/JungleVipTracker/config.json"
+SPENDING_FILE = "/home/ubuntu/JungleVipTracker/spending.json"
 
 intents = discord.Intents.default()
 intents.members = True
@@ -50,6 +51,35 @@ def set_balance(data, guild_id, user_id, amount):
         data[guild_id] = {}
 
     data[guild_id][user_id] = amount
+
+# spending data
+
+def load_spending():
+    if not os.path.exists(SPENDING_FILE):
+        return {}
+
+    with open(SPENDING_FILE, "r") as f:
+        return json.load(f)
+
+def save_spending(data):
+    with open(SPENDING_FILE, "w") as f:
+        json.dump(data, f, indent=4)
+
+def add_spent(guild_id, user_id, amount):
+    guild_id = str(guild_id)
+    user_id = str(user_id)
+
+    spending = load_spending()
+
+    if guild_id not in spending:
+        spending[guild_id] = {}
+
+    if user_id not in spending[guild_id]:
+        spending[guild_id][user_id] = 0
+
+    spending[guild_id][user_id] += amount
+
+    save_spending(spending)
 
 # ======================
 # CONFIG
@@ -209,6 +239,12 @@ async def subtract(
     new_balance = max(0, get_balance(data, interaction.guild.id, vip_user.id) - amount)
     set_balance(data, interaction.guild.id, vip_user.id, new_balance)
     save_data(data)
+    
+    add_spent(
+    interaction.guild.id,
+    vip_user.id,
+    amount
+)
 
     # 🎯 TARGET
     if target_user:

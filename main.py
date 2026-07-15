@@ -4,18 +4,25 @@ import json
 import os
 from datetime import datetime
 from dotenv import load_dotenv
+import random
+import time
+from discord.ext import tasks
 
 load_dotenv()
 
 DATA_FILE = "/home/ubuntu/JungleVipTracker/balances.json"
 CONFIG_FILE = "/home/ubuntu/JungleVipTracker/config.json"
 SPENDING_FILE = "/home/ubuntu/JungleVipTracker/spending.json"
+LEVELS_FILE = "/home/ubuntu/JungleVipTracker/levels.json"
 
 intents = discord.Intents.default()
 intents.members = True
+intents.message_content = True
 
 client = discord.Client(intents=intents)
 tree = app_commands.CommandTree(client)
+
+
 
 # ======================
 # DATA
@@ -80,6 +87,27 @@ def add_spent(guild_id, user_id, amount):
     spending[guild_id][user_id] += amount
 
     save_spending(spending)
+    
+# XP data 
+
+def load_levels():
+    if not os.path.exists(LEVELS_FILE):
+        return {}
+
+    with open(LEVELS_FILE, "r") as f:
+        return json.load(f)
+
+
+def save_levels(data):
+    with open(LEVELS_FILE, "w") as f:
+        json.dump(data, f, indent=4)
+        
+# XP COOL DOWN
+
+levels_data = load_levels()
+
+XP_COOLDOWN = 45
+xp_cooldowns = {}
 
 # ======================
 # CONFIG
@@ -133,16 +161,81 @@ async def send_log(interaction, embed):
 
     await channel.send(embed=embed)
 
+
+# ======================
+# XP AUTO SAVE
+# ======================
+
+@tasks.loop(minutes=5)
+async def save_levels_task():
+    save_levels(levels_data)
+
 # ======================
 # READY
 # ======================
 
 @client.event
 async def on_ready():
+
     if not hasattr(client, "synced"):
         await tree.sync()
         client.synced = True
+
+    if not save_levels_task.is_running():
+        save_levels_task.start()
+
     print(f"Logged in as {client.user}")
+
+# ======================
+# XP SYSTEM
+# ======================
+            
+@client.event
+async def on_message(message):
+
+    if message.author.bot:
+        return
+
+    if not message.guild:
+        return
+
+    user_id = str(message.author.id)
+    guild_id = str(message.guild.id)
+
+    now = time.time()
+
+    cooldown_key = f"{guild_id}:{user_id}"
+
+    if cooldown_key in xp_cooldowns:
+        if now - xp_cooldowns[cooldown_key] < XP_COOLDOWN:
+            return
+
+    xp_cooldowns[cooldown_key] = now
+
+    if guild_id not in levels_data:
+        levels_data[guild_id] = {}
+
+    if user_id not in levels_data[guild_id]:
+        levels_data[guild_id][user_id] = 0
+
+    old_xp = levels_data[guild_id][user_id]
+    old_level = (old_xp // 100) + 1
+
+    gained_xp = random.randint(15, 25)
+
+    levels_data[guild_id][user_id] += gained_xp
+
+    new_xp = levels_data[guild_id][user_id]
+    new_level = (new_xp // 100) + 1
+
+    if new_level > old_level:
+        embed = discord.Embed(
+            title="🎉 Level Up!",
+            description=f"{message.author.mention} reached **Level {new_level}**!",
+            color=discord.Color.gold()
+        )
+
+        await message.channel.send(embed=embed)
 
 # ======================
 # COMMANDS
@@ -512,7 +605,7 @@ async def monthlyvip(interaction: discord.Interaction, role: discord.Role):
 
     await send_log(interaction, log_embed)
 
-# Shows leadership Board
+# Shows Coin leadership Board
 
 @tree.command(
     name="leaderboard",
@@ -595,6 +688,64 @@ async def leaderboard(interaction: discord.Interaction):
 
     embed.set_footer(
         text=f"Showing Top {min(10, len(leaderboard_data))} of {len(leaderboard_data)} members • Zero balances hidden"
+    )
+
+    await interaction.response.send_message(
+        embed=embed
+    )
+
+# RANK COMMAND 
+
+@tree.command(
+    name="rank",
+    description="View your level and XP."
+)
+async def rank(
+    interaction: discord.Interaction,
+    member: discord.Member = None
+):
+
+    member = member or interaction.user
+
+    guild_id = str(interaction.guild.id)
+    user_id = str(member.id)
+
+    xp = levels_data.get(
+        guild_id,
+        {}
+    ).get(
+        user_id,
+        0
+    )
+
+    level = (xp // 100) + 1
+
+    current_level_xp = xp % 100
+    progress_percent = current_level_xp
+
+    filled = progress_percent // 10
+    empty = 10 - filled
+
+    progress_bar = "█" * filled + "░" * empty
+
+    remaining_xp = 100 - current_level_xp
+
+    embed = discord.Embed(
+        title="🏆 Rank",
+        color=discord.Color.gold()
+    )
+
+    embed.description = (
+        f"👤 {member.mention}\n\n"
+        f"⭐ **Level {level}**\n"
+        f"📈 **{xp} XP**\n\n"
+        f"**Progress**\n"
+        f"`{progress_bar}` {progress_percent}%\n\n"
+        f"🎯 **{remaining_xp} XP until Level {level + 1}**"
+    )
+
+    embed.set_thumbnail(
+        url=member.display_avatar.url
     )
 
     await interaction.response.send_message(

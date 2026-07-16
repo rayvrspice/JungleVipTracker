@@ -106,7 +106,7 @@ def save_levels(data):
 
 levels_data = load_levels()
 
-XP_COOLDOWN = 45
+XP_COOLDOWN = 60
 xp_cooldowns = {}
 
 # ======================
@@ -221,7 +221,7 @@ async def on_message(message):
     old_xp = levels_data[guild_id][user_id]
     old_level = (old_xp // 100) + 1
 
-    gained_xp = random.randint(15, 25)
+    gained_xp = random.randint(1, 21)
 
     levels_data[guild_id][user_id] += gained_xp
 

@@ -753,6 +753,95 @@ async def rank(
     )
 
 
+# TOP SPENDERS LEADERBOARD 
+
+@tree.command(
+    name="topspenders",
+    description="View the server's top spenders."
+)
+async def topspenders(interaction: discord.Interaction):
+
+    spending = load_spending()
+
+    guild_id = str(interaction.guild.id)
+
+    if guild_id not in spending:
+        return await interaction.response.send_message(
+            "No spending data found.",
+            ephemeral=True
+        )
+
+    spender_data = []
+
+    for member in interaction.guild.members:
+
+        if member.bot:
+            continue
+
+        amount_spent = spending[guild_id].get(
+            str(member.id),
+            0
+        )
+
+        if amount_spent <= 0:
+            continue
+
+        spender_data.append((member, amount_spent))
+
+    spender_data.sort(
+        key=lambda x: x[1],
+        reverse=True
+    )
+
+    if not spender_data:
+        return await interaction.response.send_message(
+            "No members have spent any coins yet.",
+            ephemeral=True
+        )
+
+    lines = []
+
+    for position, (member, amount_spent) in enumerate(
+        spender_data[:10],
+        start=1
+    ):
+
+        if position == 1:
+            prefix = "🥇"
+        elif position == 2:
+            prefix = "🥈"
+        elif position == 3:
+            prefix = "🥉"
+        else:
+            prefix = f"#{position}"
+
+        lines.append(
+            f"{prefix} {member.mention} — **{amount_spent}** Coins Spent"
+        )
+
+    total_spent = sum(amount for _, amount in spender_data)
+
+    embed = discord.Embed(
+        title="🔥 Top Spenders",
+        description="\n".join(lines),
+        color=discord.Color.red()
+    )
+
+    embed.add_field(
+        name="Total Coins Spent",
+        value=str(total_spent),
+        inline=False
+    )
+
+    embed.set_footer(
+        text=f"Showing Top {min(10, len(spender_data))} of {len(spender_data)} members"
+    )
+
+    await interaction.response.send_message(
+        embed=embed
+    )
+
+
 # ADMIN
 @tree.command(name="setlogchannel")
 async def setlogchannel(interaction: discord.Interaction, channel: discord.TextChannel):

@@ -927,7 +927,7 @@ async def staff(interaction: discord.Interaction):
         )
 
     embed = discord.Embed(
-        title="🚨 STAFF ALERT — BACKUP NEEDED",
+        title="🚨STAFF ALERT BACKUP NEEDED🚨",
         description=(
             "**The instance needs backup!**\n"
             "Available staff, please join the instance and assist as soon as possible."

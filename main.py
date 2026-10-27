@@ -879,6 +879,82 @@ async def setrole(interaction: discord.Interaction, role: discord.Role):
 
     await interaction.response.send_message("✅ Role added")
 
+
+# ======================
+# STAFF BACKUP ALERT
+# ======================
+
+# A 2-minute per-user cooldown helps prevent repeated role pings.
+staff_alert_cooldowns = {}
+
+@tree.command(name="staff", description="Alert staff that the instance needs backup.")
+@app_commands.guild_only()
+async def staff(interaction: discord.Interaction):
+    now = time.monotonic()
+    cooldown_key = (interaction.guild.id, interaction.user.id)
+    remaining = 120 - (now - staff_alert_cooldowns.get(cooldown_key, -1e9))
+
+    if remaining > 0:
+        return await interaction.response.send_message(
+            f"⏳ You can request staff backup again in {int(remaining) + 1} seconds.",
+            ephemeral=True
+        )
+
+    # Match the server's actual Discord roles, including either spelling.
+    target_roles = {
+        "Trainee": ("trianee", "trainee"),
+        "Freelancer": ("freelancer",),
+        "Moderator": ("moderator",),
+        "Supervisor": ("supervisor",),
+    }
+
+    found_roles = []
+    missing_roles = []
+    for label, aliases in target_roles.items():
+        role = next(
+            (r for r in interaction.guild.roles if r.name.casefold() in aliases),
+            None
+        )
+        if role is None:
+            missing_roles.append(label)
+        else:
+            found_roles.append(role)
+
+    if not found_roles:
+        return await interaction.response.send_message(
+            "❌ No matching staff roles were found. Check the role names in Server Settings.",
+            ephemeral=True
+        )
+
+    embed = discord.Embed(
+        title="🚨 STAFF ALERT — BACKUP NEEDED",
+        description=(
+            "**The instance needs backup!**\n"
+            "Available staff, please join the instance and assist as soon as possible."
+        ),
+        color=discord.Color.red(),
+        timestamp=datetime.utcnow()
+    )
+    embed.add_field(name="Requested by", value=interaction.user.mention, inline=False)
+    embed.set_footer(text="The Jungle | Staff Backup Alert")
+
+    await interaction.response.send_message(
+        content=" ".join(role.mention for role in found_roles),
+        embed=embed,
+        allowed_mentions=discord.AllowedMentions(
+            everyone=False, users=False, roles=found_roles
+        )
+    )
+    staff_alert_cooldowns[cooldown_key] = now
+
+    if missing_roles:
+        await interaction.followup.send(
+            "⚠️ Could not find these roles: " + ", ".join(missing_roles),
+            ephemeral=True
+        )
+
+
+
 # RUN
 print("Starting bot...")
 client.run(os.getenv("TOKEN"))
